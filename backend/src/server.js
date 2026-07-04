@@ -152,8 +152,8 @@ app.post('/api/contact', async (req, res) => {
 
     return res.json({ message: 'Message received. I will get back to you soon.' });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Message could not be sent right now' });
+    console.error('Contact error:', error);
+    return res.status(500).json({ message: `Message could not be sent right now. Error: ${error.message || error}` });
   }
 });
 
