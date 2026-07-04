@@ -135,25 +135,32 @@ app.post('/api/contact', async (req, res) => {
   try {
     if (mongoose.connection.readyState === 1) {
       await ContactMessage.create(payload);
+    } else {
+      console.warn('MongoDB not connected; message not saved to database.');
     }
 
+    // Trigger email notification in the background without blocking the response
     const transporter = createTransporter();
     if (transporter) {
-      await transporter.sendMail({
+      transporter.sendMail({
         from: process.env.MAIL_FROM || process.env.SMTP_USER,
         to: process.env.CONTACT_TO || portfolio.profile?.email || portfolio.email,
         replyTo: payload.email,
         subject: `Portfolio contact: ${payload.subject}`,
         text: `Name: ${payload.name}\nEmail: ${payload.email}\n\n${payload.message}`,
+      }).then(() => {
+        console.log('Email notification sent successfully.');
+      }).catch((mailErr) => {
+        console.error('Failed to send email notification:', mailErr.message || mailErr);
       });
     } else {
-      console.log('Contact message received:', payload);
+      console.log('No SMTP configuration found; skipped email notification. Data:', payload);
     }
 
     return res.json({ message: 'Message received. I will get back to you soon.' });
   } catch (error) {
-    console.error('Contact error:', error);
-    return res.status(500).json({ message: `Message could not be sent right now. Error: ${error.message || error}` });
+    console.error('Contact database error:', error);
+    return res.status(500).json({ message: `Message could not be saved. Error: ${error.message || error}` });
   }
 });
 
