@@ -119,7 +119,9 @@ export default function TerminalConsole({ profile, projects, stack, setCurrentVi
           </div>
         ))}
         <form onSubmit={handleCommandSubmit} className="terminal-input-row">
-          <span className="terminal-prompt">pmr-user@matrix:~$</span>
+          <span className="terminal-prompt">
+            <span className="prompt-host">pmr-user@matrix:~</span>$
+          </span>
           <input
             type="text"
             value={inputVal}

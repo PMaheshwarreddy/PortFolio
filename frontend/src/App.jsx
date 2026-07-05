@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Cpu, Github, Linkedin, Mail, MapPin, Phone, Send, Sparkles, Terminal, Trophy, Zap, RefreshCw, Instagram, Twitter } from 'lucide-react';
+import { ArrowUpRight, Cpu, Github, Linkedin, Mail, MapPin, Phone, Send, Sparkles, Terminal, Trophy, Zap, RefreshCw, Instagram, Twitter, Menu, X } from 'lucide-react';
 import { experience, profile, projects, stack, stats } from './data.js';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -50,6 +50,7 @@ function App() {
   const [formStatus, setFormStatus] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [currentView, setCurrentView] = useState('home');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const visibleProjects = showAll ? projects : projects.slice(0, 4);
 
   useEffect(() => {
@@ -187,10 +188,13 @@ function App() {
       )}
 
       <nav className="nav">
-        <a className="brand" href="#top" onClick={(e) => { e.preventDefault(); setCurrentView('home'); }}>
+        <a className="brand" href="#top" onClick={(e) => { e.preventDefault(); setCurrentView('home'); setMobileMenuOpen(false); }}>
           <span className="brand-dot" />
           PortFolio
         </a>
+        <button className="mobile-menu-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Toggle menu">
+          {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
         <div className="nav-links">
           <button className="gateway-reset-btn" onClick={() => setIsInitialized(false)} title="Re-initialize Gateway Screen">
             <RefreshCw size={13} /> Gateway
@@ -205,6 +209,22 @@ function App() {
           </a>
         </div>
       </nav>
+
+      <div className={`mobile-nav-drawer ${mobileMenuOpen ? 'open' : ''}`}>
+        <div className="mobile-nav-drawer-links">
+          <a href="#top" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Home</a>
+          <a href="#work" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Work</a>
+          <a href="#stack" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Stack</a>
+          <a href="#experience" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Experience</a>
+          <a href="#synapse" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Synapse</a>
+          <button className="mobile-gateway-btn" onClick={() => { setIsInitialized(false); setMobileMenuOpen(false); }}>
+            <RefreshCw size={14} /> Re-enter Gateway
+          </button>
+          <a className="mobile-nav-cta" href="#contact" onClick={(e) => { e.preventDefault(); setCurrentView('contact'); setMobileMenuOpen(false); }}>
+            <Zap size={14} /> Contact Me
+          </a>
+        </div>
+      </div>
 
       {currentView === 'home' ? (
         <>
