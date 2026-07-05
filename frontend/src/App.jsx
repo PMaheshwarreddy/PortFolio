@@ -255,17 +255,12 @@ function App() {
               onMouseMove={handleTilt}
               onMouseLeave={handleTiltReset}
             >
-              <div className="portrait-hud top">PROFILE_READY // 3D_MATRIX</div>
               <div className="scan-line" />
               <div className="portrait-orbit orbit-spin" />
               <div className="portrait-orbit orbit-spin-reverse" />
               <img src={profile.image} alt={profile.name} />
-              <div className="portrait-base glass-hud">
-                <div>
-                  <strong>{profile.shortName}</strong>
-                  <span className="hud-status">● LIVE SYSTEM</span>
-                </div>
-                <span>Production AI Systems</span>
+              <div className="portrait-base glass-hud" style={{ justifyContent: 'center' }}>
+                <strong style={{ fontSize: '1.4rem' }}>Hey Hi</strong>
               </div>
             </div>
 
