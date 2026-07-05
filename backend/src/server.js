@@ -243,7 +243,7 @@ INSTRUCTIONS:
         parts: [{ text: userMessage }]
       });
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -282,6 +282,10 @@ INSTRUCTIONS:
 
   if (matchedProject) {
     reply = `Project: ${matchedProject.title} (${matchedProject.category})\nDescription: ${matchedProject.description}\nTechnologies used: ${matchedProject.tech.join(', ')}\nKey Metrics: ${matchedProject.metrics.join(', ')}`;
+  } else if (msg.includes('how are you') || msg.includes('how you doing') || msg.includes('how\'s it going')) {
+    reply = `I am doing great and operating at 100% capacity! How can I assist you with Mahesh's portfolio or professional background today?`;
+  } else if (msg.includes('hi') || msg.includes('hello') || msg.includes('hey') || msg.includes('greetings') || msg.includes('yo')) {
+    reply = `Hello! I am Synapse, Mahesh's AI assistant. How can I help you explore his projects, experience, or skills today?`;
   } else if (msg.includes('about') || msg.includes('who are you') || msg.includes('introduce') || msg.includes('yourself') || msg.includes('summary') || msg.includes('profile')) {
     reply = `I am ${profile?.name || 'Panduga Maheswar Reddy'}, a senior ${profile?.role || 'AI/GenAI Engineer'} based in ${profile?.location || 'India'}. ${profile?.summary || ''}`;
   } else if (msg.includes('skill') || msg.includes('stack') || msg.includes('technolog') || msg.includes('language') || msg.includes('tool') || msg.includes('framework')) {
