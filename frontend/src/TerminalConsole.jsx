@@ -19,7 +19,7 @@ export default function TerminalConsole({ profile, projects, stack, setCurrentVi
     const commandClean = query.toLowerCase();
 
     setInputVal('');
-    setHistory((prev) => [...prev, { text: `pmr-user@matrix:~$ ${query}`, type: 'input' }]);
+    setHistory((prev) => [...prev, { text: `Mahesh@synapse:~$ ${query}`, type: 'input' }]);
 
     let response = [];
 
@@ -78,7 +78,7 @@ export default function TerminalConsole({ profile, projects, stack, setCurrentVi
             .filter(item => (item.type === 'input' || item.type === 'success') && item.text)
             .map(item => ({
               role: item.type === 'input' ? 'user' : 'model',
-              text: item.text.replace(/^pmr-user@matrix:~\$\s*/, '').replace(/^pmr-user@matrix:~\s*\$\s*/, '').trim()
+              text: item.text.replace(/^[^$]*\$\s*/, '').trim()
             }))
             .slice(-12);
 
@@ -113,10 +113,7 @@ export default function TerminalConsole({ profile, projects, stack, setCurrentVi
           <span className="dot green" />
         </div>
         <div className="terminal-title">
-          <Terminal size={14} /> interactive_matrix_console.sh
-        </div>
-        <div className="terminal-status-badge">
-          <Shield size={12} /> SECURE_TLS_256
+          <Terminal size={14} /> Explore me console.sh
         </div>
       </div>
 
@@ -128,7 +125,7 @@ export default function TerminalConsole({ profile, projects, stack, setCurrentVi
         ))}
         <form onSubmit={handleCommandSubmit} className="terminal-input-row">
           <span className="terminal-prompt">
-            <span className="prompt-host">pmr-user@matrix:~</span>$
+            <span className="prompt-host">Mahesh@synapse:~</span>$
           </span>
           <input
             type="text"
