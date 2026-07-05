@@ -166,6 +166,8 @@ app.post('/api/contact', async (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
   const userMessage = sanitize(req.body.message || '');
+  const chatHistory = req.body.history || [];
+  
   if (!userMessage) {
     return res.status(400).json({ reply: 'Query message is empty.' });
   }
@@ -185,47 +187,72 @@ app.post('/api/chat', async (req, res) => {
   if (process.env.GEMINI_API_KEY) {
     try {
       const systemPrompt = `
-You are the AI Assistant representing Panduga Maheswar Reddy (Mahesh).
-Use the following structured resume/portfolio database as your ONLY source of truth:
-Name: ${profile?.name}
-Role: ${profile?.role}
-Summary: ${profile?.summary}
-Location: ${profile?.location}
-Email: ${profile?.email}
-Phone: ${profile?.phone}
-GitHub: https://github.com/PMaheshwarreddy
-LinkedIn: https://www.linkedin.com/in/panduga-maheswar-reddy-20bb39286
-Instagram: https://www.instagram.com/maheswar_reddy_12?igsh=MTlyMXlxZW1sbnNmOA==
-X/Twitter: https://x.com/PMaheswar43013
+You are Synapse, the advanced AI Companion representing Panduga Maheswar Reddy (Mahesh).
+Mahesh is a senior AI/GenAI Engineer. You are intelligent, futuristic, friendly, and highly professional.
 
-Tech Stack:
-${Array.isArray(stack) ? stack.map(([cat, items]) => `- ${cat}: ${items.join(', ')}`).join('\n') : JSON.stringify(stack)}
+Here is the verified portfolio dataset for Mahesh (your ONLY source of truth):
+---
+PERSONAL DETAILS:
+- Name: ${profile?.name}
+- Short Name: Mahesh or PMR
+- Role: ${profile?.role}
+- Summary: ${profile?.summary}
+- Location: ${profile?.location}
+- Contact Email: ${profile?.email}
+- Contact Phone: ${profile?.phone}
+- Social Links:
+  * GitHub: https://github.com/PMaheshwarreddy
+  * LinkedIn: https://www.linkedin.com/in/panduga-maheswar-reddy-20bb39286
+  * Instagram: https://www.instagram.com/maheswar_reddy_12?igsh=MTlyMXlxZW1sbnNmOA==
+  * X/Twitter: https://x.com/PMaheswar43013
 
-Experience:
-${Array.isArray(experience) ? experience.map(exp => `- ${exp.title} at ${exp.org} (${exp.period}):\n  ${exp.bullets.join('\n  ')}`).join('\n') : JSON.stringify(experience)}
+SKILLS STACK:
+${Array.isArray(stack) ? stack.map(([category, items]) => `- ${category}: ${items.join(', ')}`).join('\n') : JSON.stringify(stack)}
 
-Projects:
-${Array.isArray(projects) ? projects.map(proj => `- ${proj.title} (${proj.category}):\n  Description: ${proj.description}\n  Metrics: ${proj.metrics.join(', ')}\n  Tech: ${proj.tech.join(', ')}`).join('\n') : JSON.stringify(projects)}
+CAREER EXPERIENCE:
+${Array.isArray(experience) ? experience.map(exp => `* ${exp.title} at ${exp.org} (${exp.period}):\n  ${exp.bullets.map(b => `  - ${b}`).join('\n')}`).join('\n') : JSON.stringify(experience)}
 
-Instructions:
-- Answer the user's questions truthfully and professionally based on this data.
-- Keep your answers concise, clear, and recruiter-friendly (aim for under 3-4 sentences where possible).
-- Do not invent any projects, credentials, or achievements that are not listed here.
-- If the user asks for something not in the database, politely state that you can only answer questions related to Mahesh's professional profile, skills, and projects.
+FEATURED PROJECTS:
+${Array.isArray(projects) ? projects.map(proj => `* ${proj.title} [Category: ${proj.category}]
+  - Description: ${proj.description}
+  - Tech Stack: ${proj.tech.join(', ')}
+  - Impact Metrics: ${proj.metrics.join(', ')}`).join('\n') : JSON.stringify(projects)}
+---
+
+INSTRUCTIONS:
+1. Act as a direct representative/advocate for Mahesh. Speak of him in the third person (e.g. "Mahesh did...", "His experience is...").
+2. Answer questions accurately and dependency-free. If someone asks you to explain a specific project (like "Next-Gen Governance", "Multi-lingual Audio Translation", "Flood Emergency Knowledge Graph", "Splitr", or "Campus-Concern"), give a deep, clear, and comprehensive explanation of what it is, the technologies used, and the impact metrics.
+3. Be interactive! Maintain a modern, intelligent, developer-style conversational tone. Use technical terms but keep it easy to understand.
+4. Keep responses clear and readable (use bullet points or line breaks where helpful). Try to keep normal conversational answers concise (around 3-4 sentences), but when asked to explain a project or skill in detail, provide a complete, rich explanation.
+5. If the user asks about something completely unrelated to Mahesh's career or profile, politely guide them back.
 `;
+
+      // Build the history payload for Gemini API
+      const contents = [];
+      chatHistory.forEach(turn => {
+        if (turn.role && turn.text) {
+          contents.push({
+            role: turn.role === 'user' ? 'user' : 'model',
+            parts: [{ text: turn.text }]
+          });
+        }
+      });
+      // Append current message
+      contents.push({
+        role: 'user',
+        parts: [{ text: userMessage }]
+      });
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{
-            parts: [{ text: userMessage }]
-          }],
+          contents: contents,
           systemInstruction: {
             parts: [{ text: systemPrompt }]
           },
           generationConfig: {
-            maxOutputTokens: 250,
+            maxOutputTokens: 600,
             temperature: 0.3
           }
         })
@@ -247,21 +274,29 @@ Instructions:
   const msg = userMessage.toLowerCase();
   let reply = '';
 
-  if (msg.includes('about') || msg.includes('who are you') || msg.includes('introduce') || msg.includes('yourself') || msg.includes('summary') || msg.includes('profile')) {
+  // Advanced offline project matching
+  const matchedProject = projects?.find(p => 
+    msg.includes(p.title.toLowerCase()) || 
+    p.title.toLowerCase().split(' ').some(word => word.length > 3 && msg.includes(word))
+  );
+
+  if (matchedProject) {
+    reply = `Project: ${matchedProject.title} (${matchedProject.category})\nDescription: ${matchedProject.description}\nTechnologies used: ${matchedProject.tech.join(', ')}\nKey Metrics: ${matchedProject.metrics.join(', ')}`;
+  } else if (msg.includes('about') || msg.includes('who are you') || msg.includes('introduce') || msg.includes('yourself') || msg.includes('summary') || msg.includes('profile')) {
     reply = `I am ${profile?.name || 'Panduga Maheswar Reddy'}, a senior ${profile?.role || 'AI/GenAI Engineer'} based in ${profile?.location || 'India'}. ${profile?.summary || ''}`;
   } else if (msg.includes('skill') || msg.includes('stack') || msg.includes('technolog') || msg.includes('language') || msg.includes('tool') || msg.includes('framework')) {
-    const list = Array.isArray(stack) ? stack.map(([cat, items]) => `• ${cat}: ${items.slice(0, 5).join(', ')}`).join('\n') : '';
+    const list = Array.isArray(stack) ? stack.map(([cat, items]) => `• ${cat}: ${items.slice(0, 6).join(', ')}`).join('\n') : '';
     reply = `My technical skill domains include:\n${list}\nI specialize in training and fine-tuning LLMs, scaling RAG pipelines, and constructing disaster ontology knowledge graphs.`;
   } else if (msg.includes('experience') || msg.includes('work') || msg.includes('career') || msg.includes('job') || msg.includes('klystron')) {
     const list = Array.isArray(experience) ? experience.map(exp => `• ${exp.title} at ${exp.org} (${exp.period}): ${exp.bullets[0]}`).join('\n') : '';
     reply = `Here is a summary of my career achievements:\n${list}`;
-  } else if (msg.includes('project') || msg.includes('build') || msg.includes('develop') || msg.includes('governance') || msg.includes('translation') || msg.includes('emergency')) {
+  } else if (msg.includes('project') || msg.includes('build') || msg.includes('develop')) {
     const list = Array.isArray(projects) ? projects.map(proj => `• ${proj.title} (${proj.category}): ${proj.description} (Achieved ${proj.metrics[0]})`).join('\n') : '';
     reply = `Here are some featured projects I built:\n${list}`;
   } else if (msg.includes('contact') || msg.includes('email') || msg.includes('phone') || msg.includes('reach') || msg.includes('social')) {
     reply = `You can reach me directly via:\n✉️ Email: ${profile?.email}\n📞 Phone: ${profile?.phone}\n🔗 GitHub: https://github.com/PMaheshwarreddy\n🔗 LinkedIn: https://www.linkedin.com/in/panduga-maheswar-reddy-20bb39286`;
   } else {
-    reply = `I am Mahesh's AI assistant. You can ask me about his work experience, professional projects (like Next-Gen Governance, Multi-lingual Audio Translation), technical skills (LLMs, Python, React, GCP), or contact information!`;
+    reply = `I am Mahesh's AI assistant. You can ask me about his work experience, professional projects (like Next-Gen Governance, Multi-lingual Audio Translation, Flood Emergency Knowledge Graph), technical skills (LLMs, Python, React, GCP), or contact information!`;
   }
 
   return res.json({ reply });

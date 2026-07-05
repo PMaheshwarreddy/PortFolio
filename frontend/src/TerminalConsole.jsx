@@ -74,11 +74,19 @@ export default function TerminalConsole({ profile, projects, stack, setCurrentVi
         try {
           setHistory((prev) => [...prev, { text: 'Thinking...', type: 'info', id: 'loading-line' }]);
           
+          const chatHistory = history
+            .filter(item => (item.type === 'input' || item.type === 'success') && item.text)
+            .map(item => ({
+              role: item.type === 'input' ? 'user' : 'model',
+              text: item.text.replace(/^pmr-user@matrix:~\$\s*/, '').replace(/^pmr-user@matrix:~\s*\$\s*/, '').trim()
+            }))
+            .slice(-12);
+
           const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
           const res = await fetch(`${API_URL}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: query }),
+            body: JSON.stringify({ message: query, history: chatHistory }),
           });
           const data = await res.json();
           
