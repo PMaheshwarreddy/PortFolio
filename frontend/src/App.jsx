@@ -203,7 +203,7 @@ function App() {
           <a href="#work" onClick={() => setCurrentView('home')}>Work</a>
           <a href="#stack" onClick={() => setCurrentView('home')}>Stack</a>
           <a href="#experience" onClick={() => setCurrentView('home')}>Experience</a>
-          <a href="#synapse" onClick={() => setCurrentView('home')}>Synapse</a>
+          <a href="#synapse" onClick={(e) => { e.preventDefault(); setCurrentView('synapse'); window.scrollTo(0, 0); }}>Synapse</a>
           <a className="nav-cta" href="#contact" onClick={(e) => { e.preventDefault(); setCurrentView('contact'); }}>
             <Zap size={14} /> Contact
           </a>
@@ -216,7 +216,7 @@ function App() {
           <a href="#work" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Work</a>
           <a href="#stack" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Stack</a>
           <a href="#experience" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Experience</a>
-          <a href="#synapse" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Synapse</a>
+          <a href="#synapse" onClick={(e) => { e.preventDefault(); setCurrentView('synapse'); setMobileMenuOpen(false); window.scrollTo(0, 0); }}>Synapse</a>
           <button className="mobile-gateway-btn" onClick={() => { setIsInitialized(false); setMobileMenuOpen(false); }}>
             <RefreshCw size={14} /> Re-enter Gateway
           </button>
@@ -444,6 +444,17 @@ function App() {
             </div>
           </section>
         </>
+      ) : currentView === 'synapse' ? (
+        <section className="section contact-page-section" id="synapse" style={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div className="section-head reveal" style={{ opacity: 1, transform: 'none', marginBottom: '2rem' }}>
+            <p className="eyebrow glow-pill">Interactive Command Deck</p>
+            <h2> Synapse <span className="cyber-gradient-text"></span></h2>
+          </div>
+          <TerminalConsole profile={profile} projects={projects} stack={stack} setCurrentView={setCurrentView} />
+          <button className="btn ghost cyber-btn-ghost back-home-btn" onClick={() => setCurrentView('home')} style={{ marginTop: '2rem', alignSelf: 'center', maxWidth: '200px' }}>
+            ← Back to Home
+          </button>
+        </section>
       ) : (
         <section className="section contact-page-section" id="contact">
           <div className="section-head reveal">
