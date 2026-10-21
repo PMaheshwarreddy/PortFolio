@@ -3,13 +3,74 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Panduga Maheswar Reddy - AI/GenAI Engineer portfolio with production AI systems, cloud pipelines, and full-stack work." />
     <title>Panduga Maheswar Reddy | AI/GenAI Engineer</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <meta name="description" content="Panduga Maheswar Reddy - AI/GenAI Engineer building production AI systems: fine-tuned LLMs (LLaMA 3.1), RAG pipelines, Neo4j knowledge graphs, cloud deployments and full-stack MERN apps." />
+    <meta name="keywords" content="Panduga Maheswar Reddy, AI Engineer, GenAI Engineer, LLM, RAG, LLaMA, Machine Learning, MERN, Portfolio, Trivandrum" />
+    <meta name="author" content="Panduga Maheswar Reddy" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#faf9f6" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="canonical" href="https://port-folio-frontend-one.vercel.app/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Open Graph (LinkedIn, WhatsApp, Facebook) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://port-folio-frontend-one.vercel.app/" />
+    <meta property="og:title" content="Panduga Maheswar Reddy | AI/GenAI Engineer" />
+    <meta property="og:description" content="Production-grade AI systems, fine-tuned LLMs, RAG pipelines and full-stack engineering." />
+    <meta property="og:image" content="https://port-folio-frontend-one.vercel.app/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Panduga Maheswar Reddy, AI/GenAI Engineer" />
+    <meta property="og:site_name" content="PMR Portfolio" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@PMaheswar43013" />
+    <meta name="twitter:title" content="Panduga Maheswar Reddy | AI/GenAI Engineer" />
+    <meta name="twitter:description" content="Production-grade AI systems, fine-tuned LLMs, RAG pipelines and full-stack engineering." />
+    <meta name="twitter:image" content="https://port-folio-frontend-one.vercel.app/og-image.jpg" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": "Panduga Maheswar Reddy",
+        "alternateName": "PMR",
+        "jobTitle": "AI/GenAI Engineer",
+        "url": "https://port-folio-frontend-one.vercel.app/",
+        "image": "https://port-folio-frontend-one.vercel.app/img/portrait.webp",
+        "worksFor": { "@type": "Organization", "name": "Klystron Global" },
+        "alumniOf": { "@type": "CollegeOrUniversity", "name": "Indian Institute of Information Technology Kottayam" },
+        "email": "mailto:panduga.maheswarreddy12@gmail.com",
+        "address": { "@type": "PostalAddress", "addressLocality": "Trivandrum", "addressCountry": "IN" },
+        "knowsAbout": ["Generative AI", "Large Language Models", "RAG", "Machine Learning", "Neo4j", "React", "Node.js", "Python"],
+        "sameAs": [
+          "https://github.com/PMaheshwarreddy",
+          "https://www.linkedin.com/in/panduga-maheswar-reddy-20bb39286",
+          "https://x.com/PMaheswar43013"
+        ]
+      }
+    </script>
+
+    <link rel="preload" href="/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/source-serif-4-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" as="image" href="/img/portrait.webp" type="image/webp" fetchpriority="high" />
+    <script>
+      // Set theme before first paint to avoid a flash of the wrong colors
+      (function () {
+        var d = document.documentElement, t;
+        d.classList.add('js');
+        try { t = localStorage.getItem('theme'); } catch (e) {}
+        if (!t) t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        d.dataset.theme = t;
+        if (t === 'dark') document.querySelector('meta[name="theme-color"]').setAttribute('content', '#131416');
+      })();
+    </script>
   </head>
   <body>
+    <noscript>Panduga Maheswar Reddy - AI/GenAI Engineer. Please enable JavaScript to view this portfolio.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

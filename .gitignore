@@ -26,3 +26,6 @@ pnpm-debug.log*
 # System files
 .DS_Store
 Thumbs.db
+
+# Personal résumé copies (contain phone number), never publish
+/MaheswarReddy_Resume*.pdf

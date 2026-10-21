@@ -1,533 +1,445 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Cpu, Github, Linkedin, Mail, MapPin, Phone, Send, Sparkles, Terminal, Trophy, Zap, RefreshCw, Instagram, Twitter, Menu, X } from 'lucide-react';
-import { experience, profile, projects, stack, stats } from './data.js';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import CyberBackground3D from './CyberBackground3D.jsx';
-import CyberGateway from './CyberGateway.jsx';
-import TerminalConsole from './TerminalConsole.jsx';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowRight, ArrowUpRight, Award, Briefcase, Code2, Command, ExternalLink, Github,
+  Menu, Moon, Rocket, Sun, Trophy, X,
+} from 'lucide-react';
+import { inject } from '@vercel/analytics';
+import Assistant from './Assistant.jsx';
+import ProjectModal from './ProjectModal.jsx';
+import CommandPalette from './CommandPalette.jsx';
+import ContactPage from './ContactPage.jsx';
+import Socials from './Socials.jsx';
+import { API_URL, SOCIALS } from './config.js';
+import { portfolio } from './data.js';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+if (import.meta.env.PROD) inject();
 
-function useClock() {
-  const [time, setTime] = useState('--:--:--');
+const { profile, stats, projects, stack, experience, achievements } = portfolio;
 
-  useEffect(() => {
-    const tick = () => {
-      setTime(new Intl.DateTimeFormat('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }).format(new Date()));
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
+const NAV = [
+  ['about', 'About'],
+  ['work', 'Work'],
+  ['experience', 'Experience'],
+  ['ask', 'Ask AI'],
+  ['skills', 'Skills'],
+];
 
-  return time;
+const PRINCIPLES = [
+  ['Test what I build', 'Unit and integration tests, logging and clear documentation are part of the job, not something added at the end.'],
+  ['Let the numbers decide', 'I judge a model by measurable results such as accuracy, BLEU score and latency, so every improvement is real.'],
+  ['Build it with the team', 'I work closely with cross-functional teams to ship features, fix production issues and keep systems reliable and secure.'],
+];
+
+const ext = { target: '_blank', rel: 'noopener noreferrer' };
+const CONTACT_PATH = '/contact';
+const HOME_TITLE = typeof document !== 'undefined' ? document.title : '';
+const isContactUrl = () => location.pathname.replace(/\/+$/, '') === CONTACT_PATH || location.hash === '#contact';
+
+function SectionHead({ label, title, children }) {
+  return (
+    <div className="section-head reveal">
+      <p className="label">{label}</p>
+      <div>
+        <h2>{title}</h2>
+        {children && <p>{children}</p>}
+      </div>
+    </div>
+  );
 }
 
-import {
-  profile as defaultProfile,
-  stats as defaultStats,
-  projects as defaultProjects,
-  stack as defaultStack,
-  experience as defaultExperience
-} from './data.js';
+function useTheme() {
+  const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || 'light');
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#131416' : '#faf9f6');
+  }, [theme]);
+  const toggle = () => setTheme((t) => {
+    const next = t === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('theme', next); } catch { /* ignore */ }
+    return next;
+  });
+  return [theme, toggle];
+}
 
 function App() {
-  const time = useClock();
-  const [profile, setProfile] = useState(defaultProfile);
-  const [stats, setStats] = useState(defaultStats);
-  const [projects, setProjects] = useState(defaultProjects);
-  const [stack, setStack] = useState(defaultStack);
-  const [experience, setExperience] = useState(defaultExperience);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [theme, toggleTheme] = useTheme();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [active, setActive] = useState('');
   const [showAll, setShowAll] = useState(false);
-  const [formStatus, setFormStatus] = useState('');
-  const [isSending, setIsSending] = useState(false);
-  const [currentView, setCurrentView] = useState('home');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const visibleProjects = showAll ? projects : projects.slice(0, 4);
+  const [activeProject, setActiveProject] = useState(null);
+  const [page, setPage] = useState(() => (isContactUrl() ? 'contact' : 'home'));
+  const [pendingScroll, setPendingScroll] = useState(null);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const visibleProjects = showAll ? projects : projects.slice(0, 5);
 
+  // Old links like /#contact now land on the contact page
   useEffect(() => {
-    async function fetchProfile() {
-      try {
-        const res = await fetch(`${API_URL}/api/profile`);
-        if (!res.ok) throw new Error('Failed to fetch profile');
-        const data = await res.json();
-        if (data.profile) setProfile(data.profile);
-        if (data.stats) setStats(data.stats);
-        if (data.projects) setProjects(data.projects);
-        if (data.stack) setStack(data.stack);
-        if (data.experience) setExperience(data.experience);
-      } catch (err) {
-        console.warn('Could not fetch dynamic profile from backend, using local static data fallback:', err);
-      }
-    }
-    fetchProfile();
+    if (page === 'contact' && location.pathname !== CONTACT_PATH) history.replaceState(null, '', CONTACT_PATH);
+  }, [page]);
+
+  // Browser back/forward between the home page and the contact page
+  useEffect(() => {
+    const onPop = () => setPage(isContactUrl() ? 'contact' : 'home');
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const marquee = useMemo(() => [
-    '⚡ AI/GENAI ENGINEER',
-    '🧬 LLAMA 3.1 FINE-TUNING',
-    '🚀 PRODUCTION-READY',
-    '☁️ GCP / AWS / AZURE',
-    '🔍 RAG PIPELINES',
-    '🤖 AGENTIC AI',
-    '🕸️ NEO4J KNOWLEDGE GRAPHS',
-    '📦 DOCKER / CLOUD RUN',
-    '💻 MERN STACK',
-  ], []);
-
   useEffect(() => {
-    if (!isInitialized) return;
-    if (currentView !== 'home') return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    gsap.registerPlugin(ScrollTrigger);
+    document.title = page === 'contact' ? `Contact · ${profile.name}` : HOME_TITLE;
+  }, [page]);
 
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        '.hero-copy',
-        { opacity: 0, x: -160 },
-        {
-          opacity: 1,
-          x: 0,
-          duration: 1.4,
-          ease: 'power4.out',
-        }
-      );
-      gsap.fromTo(
-        '.portrait-shell',
-        { opacity: 0, x: 160 },
-        {
-          opacity: 1,
-          x: 0,
-          duration: 1.4,
-          ease: 'power4.out',
-        }
-      );
-      gsap.utils.toArray('.reveal').forEach((el) => {
-        gsap.fromTo(
-          el,
-          { opacity: 0, y: 42 },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.75,
-            ease: 'power3.out',
-            scrollTrigger: { trigger: el, start: 'top 86%', once: true },
-          }
-        );
-      });
+  const openContact = useCallback(() => {
+    setMenuOpen(false);
+    if (pageRef.current !== 'contact') history.pushState(null, '', CONTACT_PATH);
+    setPage('contact');
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, []);
+
+  const goTo = useCallback((id) => {
+    setMenuOpen(false);
+    if (pageRef.current === 'contact') {
+      history.pushState(null, '', id === 'top' ? '/' : `/#${id}`);
+      setPage('home');
+      setPendingScroll(id);
+      return;
+    }
+    if (id === 'top') window.scrollTo({ top: 0, behavior: 'smooth' });
+    else document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    history.replaceState(null, '', id === 'top' ? '/' : `#${id}`);
+  }, []);
+  const navClick = (id) => (e) => { e.preventDefault(); goTo(id); };
+  const contactClick = (e) => { e.preventDefault(); openContact(); };
+
+  // Links inside assistant answers can open the contact page
+  useEffect(() => {
+    window.addEventListener('open-contact', openContact);
+    return () => window.removeEventListener('open-contact', openContact);
+  }, [openContact]);
+
+  // After coming back from the contact page, jump to the requested section
+  useEffect(() => {
+    if (page !== 'home' || !pendingScroll) return undefined;
+    const raf = requestAnimationFrame(() => {
+      if (pendingScroll === 'top') window.scrollTo(0, 0);
+      else document.getElementById(pendingScroll)?.scrollIntoView();
+      setPendingScroll(null);
     });
+    return () => cancelAnimationFrame(raf);
+  }, [page, pendingScroll]);
 
-    return () => ctx.revert();
-  }, [isInitialized, currentView]);
-
+  // Free Render instances sleep: wake the API now so the chat and form respond quickly
   useEffect(() => {
-    const onMove = (event) => {
-      document.documentElement.style.setProperty('--mx', `${event.clientX}px`);
-      document.documentElement.style.setProperty('--my', `${event.clientY}px`);
-    };
-    window.addEventListener('pointermove', onMove, { passive: true });
-    return () => window.removeEventListener('pointermove', onMove);
+    if (API_URL) fetch(`${API_URL}/api/health`, { cache: 'no-store' }).catch(() => {});
   }, []);
 
-  const handleTilt = (e) => {
-    const card = e.currentTarget;
-    const rect = card.getBoundingClientRect();
-    const x = e.clientX - rect.left - rect.width / 2;
-    const y = e.clientY - rect.top - rect.height / 2;
-    card.style.transform = `perspective(1000px) rotateX(${-y / 18}deg) rotateY(${x / 18}deg) scale3d(1.02, 1.02, 1.02)`;
-    card.style.setProperty('--cx', `${e.clientX - rect.left}px`);
-    card.style.setProperty('--cy', `${e.clientY - rect.top}px`);
-  };
+  // Deep links (/#contact): the page renders after the browser's own jump, so jump again
+  useEffect(() => {
+    const id = decodeURIComponent(location.hash.slice(1));
+    if (id) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView());
+  }, []);
 
-  const handleTiltReset = (e) => {
-    const card = e.currentTarget;
-    card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`;
-  };
+  // Header border once the page scrolls (state only changes when crossing the threshold)
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
-  async function handleSubmit(event) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    setIsSending(true);
-    setFormStatus('');
-    const body = Object.fromEntries(new FormData(formElement));
+  // Highlight the nav item for the section in view
+  useEffect(() => {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) setActive(e.target.id); });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    NAV.forEach(([id]) => { const el = document.getElementById(id); if (el) io.observe(el); });
+    return () => io.disconnect();
+  }, [page]);
 
-    try {
-      const response = await fetch(`${API_URL}/api/contact`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || 'Could not send message');
-      setFormStatus(result.message);
-      formElement.reset();
-    } catch (error) {
-      setFormStatus(`${error.message}. You can email me directly at ${profile.email}.`);
-    } finally {
-      setIsSending(false);
-    }
-  }
+  // Fade sections in once as they enter the viewport (cheap: opacity/transform only)
+  useEffect(() => {
+    const els = document.querySelectorAll('.reveal:not(.in)');
+    if (!('IntersectionObserver' in window)) { els.forEach((el) => el.classList.add('in')); return undefined; }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { rootMargin: '0px 0px -8% 0px' });
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [showAll, page]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKey = (e) => e.key === 'Escape' && setMenuOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
+
+  const paletteActions = useMemo(() => [
+    { id: 'home', label: 'Home', hint: 'Section', run: () => goTo('top') },
+    ...NAV.map(([id, label]) => ({ id, label, hint: 'Section', run: () => goTo(id) })),
+    { id: 'achievements', label: 'Achievements', hint: 'Section', run: () => goTo('achievements') },
+    { id: 'contact', label: 'Contact form', hint: 'Page', run: openContact },
+    { id: 'email', label: 'Copy email address', hint: 'Action', run: () => navigator.clipboard?.writeText(profile.email) },
+    { id: 'theme', label: 'Toggle dark mode', hint: 'Action', run: toggleTheme },
+    { id: 'gh', label: 'Open GitHub', hint: 'Link', run: () => window.open(SOCIALS.github, '_blank', 'noopener') },
+    { id: 'li', label: 'Open LinkedIn', hint: 'Link', run: () => window.open(SOCIALS.linkedin, '_blank', 'noopener') },
+    ...projects.map((p, i) => ({ id: `p-${i}`, label: p.title, hint: 'Project', run: () => setActiveProject(i) })),
+  ], [goTo, openContact, toggleTheme]);
 
   return (
-    <main>
-      <CyberBackground3D />
-      <div className="grain" />
-      <div className="cursor-glow" />
-      <div className="cyber-grid-overlay" />
+    <>
+      <a className="skip-link" href="#main">Skip to content</a>
+      <CommandPalette actions={paletteActions} />
+      <ProjectModal
+        project={activeProject !== null ? projects[activeProject] : null}
+        index={activeProject ?? 0}
+        onClose={() => setActiveProject(null)}
+      />
 
-      {!isInitialized && (
-        <CyberGateway profile={profile} onExplore={() => setIsInitialized(true)} />
-      )}
-
-      <nav className="nav">
-        <a className="brand" href="#top" onClick={(e) => { e.preventDefault(); setCurrentView('home'); setMobileMenuOpen(false); }}>
-          <span className="brand-dot" />
-          PortFolio
-        </a>
-        <button className="mobile-menu-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Toggle menu">
-          {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
-        </button>
-        <div className="nav-links">
-          <button className="gateway-reset-btn" onClick={() => setIsInitialized(false)} title="Re-initialize Gateway Screen">
-            <RefreshCw size={13} /> Gateway
-          </button>
-          <a href="#top" onClick={() => setCurrentView('home')}>Home</a>
-          <a href="#work" onClick={() => setCurrentView('home')}>Work</a>
-          <a href="#stack" onClick={() => setCurrentView('home')}>Stack</a>
-          <a href="#experience" onClick={() => setCurrentView('home')}>Experience</a>
-          <a href="#synapse" onClick={(e) => { e.preventDefault(); setCurrentView('synapse'); window.scrollTo(0, 0); }}>Synapse</a>
-          <a className="nav-cta" href="#contact" onClick={(e) => { e.preventDefault(); setCurrentView('contact'); }}>
-            <Zap size={14} /> Contact
-          </a>
+      <header className={`header${scrolled ? ' scrolled' : ''}`}>
+        <div className="wrap">
+          <a className="brand" href="/" onClick={navClick('top')}>{profile.name.split(' ').slice(1).join(' ')}</a>
+          <nav className="nav" aria-label="Main">
+            {NAV.map(([id, label]) => (
+              <a key={id} href={`/#${id}`} onClick={navClick(id)} className={page === 'home' && active === id ? 'active' : undefined}>{label}</a>
+            ))}
+            <a className={`btn btn-primary${page === 'contact' ? ' is-current' : ''}`} href={CONTACT_PATH} onClick={contactClick}>Contact</a>
+          </nav>
+          <div className="header-tools">
+            <button type="button" className="icon-btn kbd-btn" onClick={() => window.dispatchEvent(new Event('open-command-palette'))} aria-label="Open command palette" title="Search (Ctrl+K)">
+              <Command size={13} /> K
+            </button>
+            <button type="button" className="icon-btn" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} title="Toggle theme">
+              {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+            <button type="button" className="icon-btn menu-btn" onClick={() => setMenuOpen((v) => !v)} aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen} aria-controls="mobile-nav">
+              {menuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
         </div>
+      </header>
+
+      {menuOpen && <div className="menu-backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
+      <nav id="mobile-nav" className={`mobile-nav${menuOpen ? ' open' : ''}`} aria-label="Mobile">
+        {NAV.map(([id, label]) => (
+          <a key={id} href={`/#${id}`} onClick={navClick(id)}>{label}</a>
+        ))}
+        <a className="btn btn-primary" href={CONTACT_PATH} onClick={contactClick}>Get in touch</a>
       </nav>
 
-      <div className={`mobile-nav-drawer ${mobileMenuOpen ? 'open' : ''}`}>
-        <div className="mobile-nav-drawer-links">
-          <a href="#top" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Home</a>
-          <a href="#work" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Work</a>
-          <a href="#stack" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Stack</a>
-          <a href="#experience" onClick={() => { setCurrentView('home'); setMobileMenuOpen(false); }}>Experience</a>
-          <a href="#synapse" onClick={(e) => { e.preventDefault(); setCurrentView('synapse'); setMobileMenuOpen(false); window.scrollTo(0, 0); }}>Synapse</a>
-          <button className="mobile-gateway-btn" onClick={() => { setIsInitialized(false); setMobileMenuOpen(false); }}>
-            <RefreshCw size={14} /> Re-enter Gateway
-          </button>
-          <a className="mobile-nav-cta" href="#contact" onClick={(e) => { e.preventDefault(); setCurrentView('contact'); setMobileMenuOpen(false); }}>
-            <Zap size={14} /> Contact Me
-          </a>
-        </div>
-      </div>
-
-      {currentView === 'home' ? (
-        <>
-          <section className="hero" id="top">
-            <div className="hero-copy">
-              <div className="eyebrow glow-pill">
-                <Sparkles size={15} /> {profile.availability}
-              </div>
-              <h1>
-                {profile.name.split(' ').slice(0, 2).join(' ')}
-                <span className="cyber-gradient-text">{profile.name.split(' ').slice(2).join(' ')}</span>
-              </h1>
-              <p className="role-line">
-                <Terminal size={16} className="cyan-glow-icon" /> {profile.role} - <span className="highlight-text">{profile.location}</span>
-              </p>
-              <p className="hero-summary">{profile.summary}</p>
-              <div className="hero-actions">
-                <a className="btn primary cyber-btn" href="#work">
-                  View projects <ArrowUpRight size={18} />
-                </a>
-                <a className="btn ghost cyber-btn-ghost" href="#contact" onClick={(e) => { e.preventDefault(); setCurrentView('contact'); }}>Let's talk</a>
-              </div>
-            </div>
-
-            <div
-              className="portrait-shell holographic-card"
-              aria-label={`${profile.name} portrait`}
-              onMouseMove={handleTilt}
-              onMouseLeave={handleTiltReset}
-            >
-              <div className="scan-line" />
-              <div className="portrait-orbit orbit-spin" />
-              <div className="portrait-orbit orbit-spin-reverse" />
-              <img src={profile.image} alt={profile.name} />
-              <div className="portrait-base glass-hud" style={{ justifyContent: 'center' }}>
-                <strong style={{ fontSize: '1.4rem' }}>Hey Hi</strong>
-              </div>
-            </div>
-
-            <div className="hero-strip">
-              {stats.map((item) => (
-                <div className="stat cyber-stat" key={item.label} onMouseMove={handleTilt} onMouseLeave={handleTiltReset}>
-                  <strong>{item.value}</strong>
-                  <span>{item.label}</span>
+      {page === 'contact' ? (
+        <main id="main">
+          <ContactPage profile={profile} onHome={() => goTo('top')} />
+        </main>
+      ) : (
+      <main id="main">
+        <section className="hero" id="top">
+          <div className="wrap">
+            <div className="hero-grid">
+              <div>
+                <p className="label">{profile.role} · {profile.location}</p>
+                <h1>{profile.name.split(' ').slice(0, -1).join(' ')} <span>{profile.name.split(' ').at(-1)}</span></h1>
+                <p className="hero-lede">{profile.headline}</p>
+                <p className="hero-now">
+                  <span className="status-dot" aria-hidden="true" />
+                  <span><strong>{profile.currentPosition}</strong> at <strong>{profile.currentCompany}</strong>. {profile.availability}.</span>
+                </p>
+                <div className="hero-actions">
+                  <a className="btn btn-primary" href="#work" onClick={navClick('work')}>See my work <ArrowRight size={17} /></a>
+                  <a className="btn btn-secondary" href="#ask" onClick={navClick('ask')}>Ask my assistant</a>
                 </div>
-              ))}
-              <div className="stat live cyber-stat" onMouseMove={handleTilt} onMouseLeave={handleTiltReset}>
-                <strong>{time}</strong>
-                <span>IST live // Kolkata</span>
+                <Socials className="hero-social" only={['GitHub', 'LinkedIn', 'X']} />
+              </div>
+              <div className="portrait-wrap">
+                <figure className="portrait">
+                  <img src={profile.image} alt={`Portrait of ${profile.name}`} width="640" height="800" fetchpriority="high" decoding="async" />
+                </figure>
+                <div className="portrait-card">
+                  <span className="portrait-card-icon"><Briefcase size={16} aria-hidden="true" /></span>
+                  <span><small>Currently at</small>{profile.currentCompany}</span>
+                </div>
               </div>
             </div>
-          </section>
 
-          <section className="section terminal-section" id="synapse">
-            <div className="section-head reveal">
-              <p className="eyebrow glow-pill">Interactive Command Deck</p>
-              <h2> Synapse <span className="cyber-gradient-text"></span></h2>
-            </div>
-            <TerminalConsole profile={profile} projects={projects} stack={stack} setCurrentView={setCurrentView} />
-          </section>
-
-          <section className="marquee" aria-hidden="true">
-            <div>
-              {[...marquee, ...marquee].map((item, index) => (
-                <span key={`${item}-${index}`}>{item}</span>
+            <ul className="facts" aria-label="Highlights">
+              {stats.map((s) => (
+                <li key={s.label}><strong>{s.value}</strong><span>{s.label}</span></li>
               ))}
-            </div>
-          </section>
+            </ul>
+          </div>
+        </section>
 
-          <section className="section projects" id="work">
+        <section className="section" id="about" aria-labelledby="about-title">
+          <div className="wrap">
             <div className="section-head reveal">
-              <p className="eyebrow glow-pill">Selected Work</p>
-              <h2>Projects built around <span className="cyber-gradient-text">measurable outcomes.</span></h2>
+              <p className="label">About</p>
+              <h2 id="about-title">A bit about me</h2>
             </div>
-            <div className="project-list">
+            <div className="section-body about-grid reveal">
+              <div className="prose">
+                {profile.about.map((para) => <p key={para}>{para}</p>)}
+              </div>
+              <dl className="meta-list">
+                <div><dt>Now</dt><dd>{profile.currentPosition}, {profile.currentCompany}</dd></div>
+                <div><dt>Education</dt><dd>B.Tech, Computer Science, IIIT Kottayam (2026)</dd></div>
+                <div><dt>Based in</dt><dd>{profile.location}</dd></div>
+                <div><dt>Focus</dt><dd>AI-driven workflows, LLM fine-tuning, RAG and agentic AI, scalable backends</dd></div>
+              </dl>
+            </div>
+          </div>
+        </section>
+
+        <section className="section section-alt" id="work" aria-labelledby="work-title">
+          <div className="wrap">
+            <SectionHead label="Selected work" title={<span id="work-title">Projects</span>}>
+              A mix of applied LLM work, data science and full-stack products. Click any project for details.
+            </SectionHead>
+            <div className="projects">
               {visibleProjects.map((project, index) => (
-                <article
-                  className="project-card reveal cyber-card"
-                  key={project.title}
-                  onMouseMove={handleTilt}
-                  onMouseLeave={handleTiltReset}
-                >
-                  <div className="project-index">{String(index + 1).padStart(2, '0')}</div>
+                <article key={project.title} className="project reveal" onClick={() => setActiveProject(index)}>
+                  <span className="project-num" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
                   <div>
-                    <p className="project-category">{project.category}</p>
-                    <h3>{project.title}</h3>
-                    <p>{project.description}</p>
+                    <div className="project-top">
+                      <h3>{project.title}</h3>
+                      <span className="project-cat">{project.category}</span>
+                    </div>
+                    <p className="project-desc">{project.description}</p>
                     <div className="metrics">
-                      {project.metrics.map((metric) => (
-                        <span key={metric} className="metric-badge">{metric}</span>
-                      ))}
+                      {project.metrics.map((m) => <span key={m} className="metric">{m}</span>)}
                     </div>
-                    <div className="tags">
-                      {project.tech.map((tag) => (
-                        <span key={tag}>{tag}</span>
-                      ))}
+                    <ul className="tech" aria-label="Tech used">{project.tech.map((t) => <li key={t}>{t}</li>)}</ul>
+                    <div className="project-links" onClick={(e) => e.stopPropagation()}>
+                      <button type="button" onClick={() => setActiveProject(index)}>Details <ArrowUpRight size={14} /></button>
+                      {project.github && <a href={project.github} {...ext}><Github size={14} /> Code</a>}
+                      {project.live && <a href={project.live} {...ext}><ExternalLink size={14} /> Live demo</a>}
                     </div>
                   </div>
-                  <ArrowUpRight className="project-arrow" />
                 </article>
               ))}
             </div>
-            <button className="more-btn reveal cyber-btn" onClick={() => setShowAll((value) => !value)}>
-              {showAll ? 'Show less' : '⚡ Show more projects'}
-            </button>
-          </section>
-
-          <section className="section principles">
-            <div className="section-head reveal">
-              <p className="eyebrow glow-pill">Operating Principles</p>
-              <h2>I care about systems that work <span className="cyber-gradient-text">after the demo.</span></h2>
-            </div>
-            <div className="principle-grid">
-              {[
-                ['Accuracy over hype', 'I benchmark, validate, and communicate real numbers instead of hiding behind best-case screenshots.'],
-                ['Architecture first', 'Modular APIs, clean data contracts, and observability make AI workflows easier to maintain and scale.'],
-                ['Ship, measure, iterate', 'I like notebooks, but I trust deployed systems with logs, health checks, and feedback loops.'],
-              ].map(([title, text], index) => (
-                <article
-                  className="principle reveal cyber-card"
-                  key={title}
-                  onMouseMove={handleTilt}
-                  onMouseLeave={handleTiltReset}
-                >
-                  <span>0{index + 1}</span>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="section stack" id="stack">
-            <div className="section-head reveal">
-              <p className="eyebrow glow-pill">Technical Stack</p>
-              <h2>Tools I reach for in production.</h2>
-            </div>
-            <div className="stack-table reveal">
-              {stack.map(([category, items]) => (
-                <div className="stack-row cyber-row" key={category}>
-                  <strong>{category}</strong>
-                  <div>
-                    {items.map((item) => (
-                      <span key={item} className="stack-chip">{item}</span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="section experience" id="experience">
-            <div className="section-head reveal">
-              <p className="eyebrow glow-pill">Career Path</p>
-              <h2>Experience and education.</h2>
-            </div>
-            <div className="timeline">
-              {experience.map((item, index) => (
-                <article
-                  className="timeline-item reveal cyber-card"
-                  key={item.title}
-                  onMouseMove={handleTilt}
-                  onMouseLeave={handleTiltReset}
-                >
-                  <div className="timeline-num">0{index + 1}</div>
-                  <div>
-                    <p className="period-badge">{item.period}</p>
-                    <h3>{item.title}</h3>
-                    <strong className="org-text">{item.org}</strong>
-                    <ul>
-                      {item.bullets.map((bullet) => (
-                        <li key={bullet}>{bullet}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          {/* Meeting Waves Inspired by Klys.ai */}
-          <section className="section wave-divider-section">
-            <div className="wave-divider-inner">
-              <div className="wave-line wave-left">
-                <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="wave-svg">
-                  <path d="M0,20 Q50,0 100,20 T200,20" fill="none" stroke="url(#wave-glow-gradient)" strokeWidth="3" />
-                  <defs>
-                    <linearGradient id="wave-glow-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="rgba(0, 240, 204, 0)" />
-                      <stop offset="100%" stopColor="rgba(0, 240, 204, 1)" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-              <div className="wave-content">
-                <span className="wave-sub">READY TO COLLABORATE?</span>
-                <button className="btn primary cyber-btn wave-cta-btn" onClick={() => { setCurrentView('contact'); window.scrollTo(0, 0); }}>
-                  Contact Me <ArrowUpRight size={18} />
+            {projects.length > 5 && (
+              <div className="more-row">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll}>
+                  {showAll ? 'Show fewer' : `Show all ${projects.length} projects`}
                 </button>
               </div>
-              <div className="wave-line wave-right">
-                <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="wave-svg">
-                  <path d="M0,20 Q50,40 100,20 T200,20" fill="none" stroke="url(#wave-glow-gradient-rev)" strokeWidth="3" />
-                  <defs>
-                    <linearGradient id="wave-glow-gradient-rev" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="rgba(0, 240, 204, 1)" />
-                      <stop offset="100%" stopColor="rgba(0, 240, 204, 0)" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-            </div>
-          </section>
-        </>
-      ) : currentView === 'synapse' ? (
-        <section className="section contact-page-section" id="synapse" style={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <div className="section-head reveal" style={{ opacity: 1, transform: 'none', marginBottom: '2rem' }}>
-            <p className="eyebrow glow-pill">Interactive Command Deck</p>
-            <h2> Synapse <span className="cyber-gradient-text"></span></h2>
-          </div>
-          <TerminalConsole profile={profile} projects={projects} stack={stack} setCurrentView={setCurrentView} />
-          <button className="btn ghost cyber-btn-ghost back-home-btn" onClick={() => setCurrentView('home')} style={{ marginTop: '2rem', alignSelf: 'center', maxWidth: '200px' }}>
-            ← Back to Home
-          </button>
-        </section>
-      ) : (
-        <section className="section contact-page-section" id="contact">
-          <div className="section-head reveal">
-            <p className="eyebrow glow-pill">Secure Channel</p>
-
-          </div>
-          <div className="contact-panel reveal cyber-panel">
-            <div>
-              <h2>Let's build something that <span className="cyber-gradient-text">actually ships.</span></h2>
-              <p className="contact-copy">Open to full-time AI/GenAI roles, freelance engineering, and practical product collaborations.</p>
-              <div className="contact-links">
-                <a href={`mailto:${profile.email}`} className="cyber-link">
-                  <Mail size={18} />{profile.email}
-                </a>
-                <a href={`tel:${profile.phone.replace(/\s/g, '')}`} className="cyber-link">
-                  <Phone size={18} />{profile.phone}
-                </a>
-                <span className="cyber-link-static">
-                  <MapPin size={18} />Kurnool, Andhra Pradesh / Trivandrum, Kerala
-                </span>
-              </div>
-              <div className="socials">
-                <a href="https://github.com/PMaheshwarreddy" target="_blank" rel="noopener noreferrer" aria-label="GitHub" className="social-icon"><Github /></a>
-                <a href="https://www.linkedin.com/in/panduga-maheswar-reddy-20bb39286" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="social-icon"><Linkedin /></a>
-                <a href="https://www.instagram.com/maheswar_reddy_12?igsh=MTlyMXlxZW1sbnNmOA==" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="social-icon"><Instagram /></a>
-                <a href="https://x.com/PMaheswar43013" target="_blank" rel="noopener noreferrer" aria-label="Twitter" className="social-icon"><Twitter /></a>
-              </div>
-              <button className="btn ghost cyber-btn-ghost back-home-btn" onClick={() => setCurrentView('home')} style={{ marginTop: '2rem' }}>
-                ← Back to Home
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="cyber-form">
-              <label>Name<input name="name" required placeholder="Jane Cooper" className="cyber-input" /></label>
-              <label>Email<input name="email" type="email" required placeholder="jane@company.com" className="cyber-input" /></label>
-              <label>Subject<input name="subject" required placeholder="AI project opportunity" className="cyber-input" /></label>
-              <label>Message<textarea name="message" required placeholder="Tell me what you are building..." className="cyber-input" /></label>
-              <button disabled={isSending} className="btn primary cyber-btn full-btn">
-                {isSending ? 'Sending...' : <><Send size={17} /> Send message</>}
-              </button>
-              {formStatus && <p className="form-status">{formStatus}</p>}
-            </form>
+            )}
           </div>
         </section>
+
+        <section className="section" id="experience" aria-labelledby="experience-title">
+          <div className="wrap">
+            <SectionHead label="Experience" title={<span id="experience-title">Work and education</span>} />
+            <ol className="timeline">
+              {experience.map((item) => {
+                const [when, where] = item.period.split(' · ');
+                return (
+                  <li key={item.title} className="job reveal">
+                    <p className="job-when">{when}{where && <><br />{where}</>}</p>
+                    <div>
+                      <h3>{item.title}</h3>
+                      <p className="job-org">{item.org}</p>
+                      <ul>{item.bullets.map((b) => <li key={b}>{b}</li>)}</ul>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </section>
+
+        <section className="section section-alt" id="ask" aria-labelledby="ask-title">
+          <div className="wrap">
+            <SectionHead label="Ask AI" title={<span id="ask-title">Questions about my work?</span>}>
+              Chat with Synapse, my assistant. It answers in my words about my work, projects and skills, and it's happy to help with general questions too.
+            </SectionHead>
+            <div className="section-body reveal">
+              <Assistant profile={profile} />
+            </div>
+          </div>
+        </section>
+
+        <section className="section" id="skills" aria-labelledby="skills-title">
+          <div className="wrap">
+            <SectionHead label="Skills" title={<span id="skills-title">Tools I use</span>} />
+            <div className="skills">
+              {stack.map(([category, items]) => (
+                <div key={category} className="skill-group reveal">
+                  <h3>{category}</h3>
+                  <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="section" aria-labelledby="principles-title">
+          <div className="wrap">
+            <SectionHead label="How I work" title={<span id="principles-title">A few habits</span>} />
+            <div className="cols-3">
+              {PRINCIPLES.map(([title, text], i) => (
+                <div key={title} className="col reveal">
+                  <span className="col-num">0{i + 1}</span>
+                  <h3>{title}</h3>
+                  <p>{text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="section section-alt" id="achievements" aria-labelledby="achievements-title">
+          <div className="wrap">
+            <SectionHead label="Achievements" title={<span id="achievements-title">Highlights</span>} />
+            <div className="achievements">
+              {achievements.map((a, i) => {
+                const Icon = [Trophy, Award, Rocket, Code2][i % 4];
+                return (
+                  <div key={a.title} className="achievement reveal">
+                    <span className="achievement-icon"><Icon size={20} aria-hidden="true" /></span>
+                    <h3>{a.title}</h3>
+                    <p>{a.text}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className="cta-section" aria-labelledby="cta-title">
+          <div className="wrap">
+            <div className="cta-card reveal">
+              <div className="cta-copy">
+                <p className="cta-kicker">{profile.availability}</p>
+                <h2 id="cta-title">Have a role or a project in mind?</h2>
+                <p>Tell me a little about it. It takes a minute, and I&apos;ll get back to you personally.</p>
+              </div>
+              <div className="cta-actions">
+                <a className="cta-button" href={CONTACT_PATH} onClick={contactClick}>
+                  Get in touch
+                  <span className="cta-button-icon" aria-hidden="true"><ArrowRight size={18} /></span>
+                </a>
+                <a className="cta-mail" href={`mailto:${profile.email}`}>{profile.email}</a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
       )}
 
-      <footer className="footer cyber-footer">
-        <div className="footer-grid">
-          <div className="footer-branding">
-            <span className="brand-dot" />
-            <span className="footer-brand-title">PortFolio</span>
-            <p>Production-grade AI systems, fine-tuned LLMs, and intelligent document workflows.</p>
-          </div>
-          <div className="footer-links-section">
-            <h4>System Nav</h4>
-            <div className="footer-links-grid">
-              <a href="#top" onClick={(e) => { e.preventDefault(); setCurrentView('home'); }}>Hero Deck</a>
-              <a href="#work" onClick={(e) => { e.preventDefault(); setCurrentView('home'); }}>Projects</a>
-              <a href="#stack" onClick={(e) => { e.preventDefault(); setCurrentView('home'); }}>Tech Stack</a>
-              <a href="#experience" onClick={(e) => { e.preventDefault(); setCurrentView('home'); }}>Timeline</a>
-            </div>
-          </div>
-          <div className="footer-socials-section">
-            <h4>Social Profiles</h4>
-            <div className="socials footer-socials">
-              <a href="https://github.com/PMaheshwarreddy" target="_blank" rel="noopener noreferrer" aria-label="GitHub" className="social-icon"><Github /></a>
-              <a href="https://www.linkedin.com/in/panduga-maheswar-reddy-20bb39286" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="social-icon"><Linkedin /></a>
-              <a href="https://www.instagram.com/maheswar_reddy_12?igsh=MTlyMXlxZW1sbnNmOA==" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="social-icon"><Instagram /></a>
-              <a href="https://x.com/PMaheswar43013" target="_blank" rel="noopener noreferrer" aria-label="Twitter" className="social-icon"><Twitter /></a>
-            </div>
-          </div>
-        </div>
-        <div className="footer-bottom">
-          <span>© {new Date().getFullYear()} {profile.name}. All systems operational.</span>
-          <a href="#top" className="back-top" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Warp to Top ↑</a>
+      <footer className="footer">
+        <div className="wrap">
+          <span>© {new Date().getFullYear()} {profile.name}</span>
+          <nav aria-label="Footer">
+            <a href={SOCIALS.github} {...ext}>GitHub</a>
+            <a href={SOCIALS.linkedin} {...ext}>LinkedIn</a>
+            <a href={CONTACT_PATH} onClick={contactClick}>Contact</a>
+            <a href="/#top" onClick={navClick('top')}>Back to top ↑</a>
+          </nav>
         </div>
       </footer>
-    </main>
+    </>
   );
 }
 

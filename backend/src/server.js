@@ -6,29 +6,52 @@ import mongoose from 'mongoose';
 import morgan from 'morgan';
 import nodemailer from 'nodemailer';
 import { portfolio } from './data.js';
+import { answer, dataVersion } from './chat.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
+app.set('trust proxy', 1);
 app.use(helmet());
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  CLIENT_URL
+  'https://port-folio-frontend-one.vercel.app',
+  ...CLIENT_URL.split(',').map((u) => u.trim()).filter(Boolean),
 ];
+// Only this project's Vercel preview deployments (not every *.vercel.app site)
+const previewPattern = /^https:\/\/port-folio-frontend[a-z0-9-]*\.vercel\.app$/;
 app.use(cors({
+  // Unknown origins simply get no CORS headers (browser blocks them) instead of a 500 error
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  }
+    callback(null, !origin || allowedOrigins.includes(origin) || previewPattern.test(origin));
+  },
 }));
-app.use(express.json({ limit: '1mb' }));
-app.use(morgan('dev'));
+app.use(express.json({ limit: '50kb' }));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'));
+
+// Lightweight in-memory rate limiter (no extra dependency)
+function rateLimit({ windowMs, max, message }) {
+  const hits = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = req.ip || 'unknown';
+    const entry = hits.get(key);
+    if (!entry || now > entry.reset) {
+      hits.set(key, { count: 1, reset: now + windowMs });
+    } else if (++entry.count > max) {
+      return res.status(429).json({ message, reply: message });
+    }
+    if (hits.size > 5000) {
+      for (const [k, v] of hits) if (now > v.reset) hits.delete(k);
+    }
+    next();
+  };
+}
+const contactLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: 'Too many messages. Please try again later.' });
+const chatLimiter = rateLimit({ windowMs: 60 * 1000, max: 15, message: 'Rate limit reached. Please wait a minute and try again.' });
 
 const portfolioSchema = new mongoose.Schema({
   profile: mongoose.Schema.Types.Mixed,
@@ -36,6 +59,7 @@ const portfolioSchema = new mongoose.Schema({
   projects: mongoose.Schema.Types.Mixed,
   stack: mongoose.Schema.Types.Mixed,
   experience: mongoose.Schema.Types.Mixed,
+  achievements: mongoose.Schema.Types.Mixed,
 });
 
 const PortfolioData = mongoose.models.PortfolioData || mongoose.model('PortfolioData', portfolioSchema);
@@ -73,8 +97,8 @@ const messageSchema = new mongoose.Schema({
 
 const ContactMessage = mongoose.models.ContactMessage || mongoose.model('ContactMessage', messageSchema);
 
-function sanitize(value = '') {
-  return String(value).trim().slice(0, 2000);
+function sanitize(value = '', max = 2000) {
+  return String(value ?? '').trim().slice(0, max);
 }
 
 function createTransporter() {
@@ -93,7 +117,6 @@ function createTransporter() {
     port: Number(SMTP_PORT),
     secure: Number(SMTP_PORT) === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
-    tls: { rejectUnauthorized: false }
   });
 }
 
@@ -116,12 +139,17 @@ app.get('/api/profile', async (_req, res) => {
   }
 });
 
-app.post('/api/contact', async (req, res) => {
+app.post('/api/contact', contactLimiter, async (req, res) => {
+  // Honeypot field: real visitors never see it, bots fill it in. Pretend success.
+  if (req.body?.company) {
+    return res.json({ message: 'Thanks! Your message was sent.' });
+  }
+
   const payload = {
-    name: sanitize(req.body.name),
-    email: sanitize(req.body.email),
-    subject: sanitize(req.body.subject),
-    message: sanitize(req.body.message),
+    name: sanitize(req.body?.name, 120),
+    email: sanitize(req.body?.email, 200),
+    subject: sanitize(req.body?.subject, 200),
+    message: sanitize(req.body?.message, 2000),
   };
 
   if (!payload.name || !payload.email || !payload.subject || !payload.message) {
@@ -132,178 +160,146 @@ app.post('/api/contact', async (req, res) => {
     return res.status(400).json({ message: 'Please enter a valid email address' });
   }
 
-  try {
-    if (mongoose.connection.readyState === 1) {
-      await ContactMessage.create(payload);
-    } else {
-      console.warn('MongoDB not connected; message not saved to database.');
-    }
+  let saved = false;
+  let emailed = false;
 
-    // Trigger email notification in the background without blocking the response
-    const transporter = createTransporter();
-    if (transporter) {
-      transporter.sendMail({
+  if (mongoose.connection.readyState === 1) {
+    try {
+      await ContactMessage.create(payload);
+      saved = true;
+    } catch (error) {
+      console.error('Contact: could not save message to MongoDB:', error.message);
+    }
+  }
+
+  // Await delivery so the message is not dropped after responding
+  const transporter = createTransporter();
+  if (transporter) {
+    try {
+      await transporter.sendMail({
         from: process.env.MAIL_FROM || process.env.SMTP_USER,
-        to: process.env.CONTACT_TO || portfolio.profile?.email || portfolio.email,
+        to: process.env.CONTACT_TO || portfolio.profile.email,
         replyTo: payload.email,
         subject: `Portfolio contact: ${payload.subject}`,
         text: `Name: ${payload.name}\nEmail: ${payload.email}\n\n${payload.message}`,
-      }).then(() => {
-        console.log('Email notification sent successfully.');
-      }).catch((mailErr) => {
-        console.error('Failed to send email notification:', mailErr.message || mailErr);
       });
-    } else {
-      console.log('No SMTP configuration found; skipped email notification. Data:', payload);
+      emailed = true;
+    } catch (mailErr) {
+      console.error('Contact: email notification failed:', mailErr.message || mailErr);
     }
-
-    return res.json({ message: 'Message received. I will get back to you soon.' });
-  } catch (error) {
-    console.error('Contact database error:', error);
-    return res.status(500).json({ message: `Message could not be saved. Error: ${error.message || error}` });
   }
+
+  if (!saved && !emailed) {
+    // Never tell the visitor "received" when the message was actually lost
+    return res.status(503).json({ message: 'Message could not be delivered right now' });
+  }
+  return res.json({ message: 'Thanks! Your message was sent. I will get back to you soon.' });
 });
 
-app.post('/api/chat', async (req, res) => {
-  const userMessage = sanitize(req.body.message || '');
-  const chatHistory = req.body.history || [];
-  
-  if (!userMessage) {
-    return res.status(400).json({ reply: 'Query message is empty.' });
-  }
+// Answer cache for first questions (suggestion chips are asked a lot).
+// Memory for speed + MongoDB so answers survive restarts and save the daily model quota.
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const answerCache = new Map();
+const chatAnswerSchema = new mongoose.Schema({
+  key: { type: String, required: true, unique: true },
+  text: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now, expires: CACHE_TTL_MS / 1000 },
+});
+const ChatAnswer = mongoose.models.ChatAnswer || mongoose.model('ChatAnswer', chatAnswerSchema);
 
-  let data = portfolio;
+async function cacheGet(key) {
+  const hit = answerCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.text;
+  answerCache.delete(key);
+  if (mongoose.connection.readyState !== 1) return null;
   try {
-    if (mongoose.connection.readyState === 1) {
-      const dbData = await PortfolioData.findOne();
-      if (dbData) data = dbData;
+    const doc = await ChatAnswer.findOne({ key }).lean();
+    if (doc) {
+      answerCache.set(key, { text: doc.text, at: new Date(doc.createdAt).getTime() });
+      return doc.text;
     }
   } catch (err) {
-    console.warn('Chat API: error reading from DB, falling back to static:', err);
+    console.warn('Chat cache read failed:', err.message);
   }
+  return null;
+}
+function cacheSet(key, text) {
+  if (answerCache.size > 500) answerCache.delete(answerCache.keys().next().value);
+  answerCache.set(key, { text, at: Date.now() });
+  if (mongoose.connection.readyState === 1) {
+    ChatAnswer.updateOne({ key }, { $set: { text, createdAt: new Date() } }, { upsert: true })
+      .catch((err) => console.warn('Chat cache write failed:', err.message));
+  }
+}
 
-  const { profile, projects, stack, experience } = data;
-
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      const systemPrompt = `
-You are Synapse, the advanced AI Companion representing Panduga Maheswar Reddy (Mahesh).
-Mahesh is a senior AI/GenAI Engineer. You are intelligent, futuristic, friendly, and highly professional.
-
-Here is the verified portfolio dataset for Mahesh (your ONLY source of truth):
----
-PERSONAL DETAILS:
-- Name: ${profile?.name}
-- Short Name: Mahesh or PMR
-- Role: ${profile?.role}
-- Summary: ${profile?.summary}
-- Location: ${profile?.location}
-- Contact Email: ${profile?.email}
-- Contact Phone: ${profile?.phone}
-- Social Links:
-  * GitHub: https://github.com/PMaheshwarreddy
-  * LinkedIn: https://www.linkedin.com/in/panduga-maheswar-reddy-20bb39286
-  * Instagram: https://www.instagram.com/maheswar_reddy_12?igsh=MTlyMXlxZW1sbnNmOA==
-  * X/Twitter: https://x.com/PMaheswar43013
-
-SKILLS STACK:
-${Array.isArray(stack) ? stack.map(([category, items]) => `- ${category}: ${items.join(', ')}`).join('\n') : JSON.stringify(stack)}
-
-CAREER EXPERIENCE:
-${Array.isArray(experience) ? experience.map(exp => `* ${exp.title} at ${exp.org} (${exp.period}):\n  ${exp.bullets.map(b => `  - ${b}`).join('\n')}`).join('\n') : JSON.stringify(experience)}
-
-FEATURED PROJECTS:
-${Array.isArray(projects) ? projects.map(proj => `* ${proj.title} [Category: ${proj.category}]
-  - Description: ${proj.description}
-  - Tech Stack: ${proj.tech.join(', ')}
-  - Impact Metrics: ${proj.metrics.join(', ')}`).join('\n') : JSON.stringify(projects)}
----
-
-INSTRUCTIONS:
-1. Act as a direct representative/advocate for Mahesh. Speak of him in the third person (e.g. "Mahesh did...", "His experience is...").
-2. Answer questions accurately and dependency-free. If someone asks you to explain a specific project (like "Next-Gen Governance", "Multi-lingual Audio Translation", "Flood Emergency Knowledge Graph", "Splitr", or "Campus-Concern"), give a deep, clear, and comprehensive explanation of what it is, the technologies used, and the impact metrics.
-3. Be interactive! Maintain a modern, intelligent, developer-style conversational tone. Use technical terms but keep it easy to understand.
-4. Keep responses clear and readable (use bullet points or line breaks where helpful). Try to keep normal conversational answers concise (around 3-4 sentences), but when asked to explain a project or skill in detail, provide a complete, rich explanation.
-5. If the user asks about something completely unrelated to Mahesh's career or profile, politely guide them back.
-`;
-
-      // Build the history payload for Gemini API
-      const contents = [];
-      chatHistory.forEach(turn => {
-        if (turn.role && turn.text) {
-          contents.push({
-            role: turn.role === 'user' ? 'user' : 'model',
-            parts: [{ text: turn.text }]
-          });
-        }
-      });
-      // Append current message
-      contents.push({
-        role: 'user',
-        parts: [{ text: userMessage }]
-      });
-
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: contents,
-          systemInstruction: {
-            parts: [{ text: systemPrompt }]
-          },
-          generationConfig: {
-            maxOutputTokens: 600,
-            temperature: 0.3
-          }
-        })
-      });
-
-      if (response.ok) {
-        const json = await response.json();
-        const reply = json.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (reply) {
-          return res.json({ reply: reply.trim() });
-        }
-      }
-      console.warn('Gemini API call failed or returned empty response, falling back to local NLP.');
-    } catch (err) {
-      console.error('Error invoking Gemini API:', err);
+async function loadPortfolio() {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const doc = await PortfolioData.findOne().lean();
+      if (doc?.profile) return doc;
     }
+  } catch (err) {
+    console.warn('Chat: DB read failed, using static data:', err.message);
+  }
+  return portfolio;
+}
+
+app.post('/api/chat', chatLimiter, async (req, res) => {
+  const message = sanitize(req.body?.message, 500);
+  const history = Array.isArray(req.body?.history) ? req.body.history.slice(-10) : [];
+  const wantsStream = String(req.headers.accept || '').includes('text/event-stream');
+
+  if (!message) {
+    return res.status(400).json({ reply: 'Please type a question.' });
   }
 
-  const msg = userMessage.toLowerCase();
-  let reply = '';
+  const data = await loadPortfolio();
+  // Cache key includes a hash of the portfolio data, so editing data.js invalidates old answers
+  const cacheKey = history.length ? null : `${dataVersion(data)}:${message.toLowerCase().replace(/\s+/g, ' ').replace(/[?!.]+$/, '').trim()}`;
+  const cached = cacheKey ? await cacheGet(cacheKey) : null;
 
-  // Advanced offline project matching
-  const matchedProject = projects?.find(p => 
-    msg.includes(p.title.toLowerCase()) || 
-    p.title.toLowerCase().split(' ').some(word => word.length > 3 && msg.includes(word))
-  );
-
-  if (matchedProject) {
-    reply = `Project: ${matchedProject.title} (${matchedProject.category})\nDescription: ${matchedProject.description}\nTechnologies used: ${matchedProject.tech.join(', ')}\nKey Metrics: ${matchedProject.metrics.join(', ')}`;
-  } else if (msg.includes('how are you') || msg.includes('how you doing') || msg.includes('how\'s it going')) {
-    reply = `I am doing great and operating at 100% capacity! How can I assist you with Mahesh's portfolio or professional background today?`;
-  } else if (msg.includes('hi') || msg.includes('hello') || msg.includes('hey') || msg.includes('greetings') || msg.includes('yo')) {
-    reply = `Hello! I am Synapse, Mahesh's AI assistant. How can I help you explore his projects, experience, or skills today?`;
-  } else if (msg.includes('about') || msg.includes('who are you') || msg.includes('introduce') || msg.includes('yourself') || msg.includes('summary') || msg.includes('profile')) {
-    reply = `I am ${profile?.name || 'Panduga Maheswar Reddy'}, a senior ${profile?.role || 'AI/GenAI Engineer'} based in ${profile?.location || 'India'}. ${profile?.summary || ''}`;
-  } else if (msg.includes('skill') || msg.includes('stack') || msg.includes('technolog') || msg.includes('language') || msg.includes('tool') || msg.includes('framework')) {
-    const list = Array.isArray(stack) ? stack.map(([cat, items]) => `• ${cat}: ${items.slice(0, 6).join(', ')}`).join('\n') : '';
-    reply = `My technical skill domains include:\n${list}\nI specialize in training and fine-tuning LLMs, scaling RAG pipelines, and constructing disaster ontology knowledge graphs.`;
-  } else if (msg.includes('experience') || msg.includes('work') || msg.includes('career') || msg.includes('job') || msg.includes('klystron')) {
-    const list = Array.isArray(experience) ? experience.map(exp => `• ${exp.title} at ${exp.org} (${exp.period}): ${exp.bullets[0]}`).join('\n') : '';
-    reply = `Here is a summary of my career achievements:\n${list}`;
-  } else if (msg.includes('project') || msg.includes('build') || msg.includes('develop')) {
-    const list = Array.isArray(projects) ? projects.map(proj => `• ${proj.title} (${proj.category}): ${proj.description} (Achieved ${proj.metrics[0]})`).join('\n') : '';
-    reply = `Here are some featured projects I built:\n${list}`;
-  } else if (msg.includes('contact') || msg.includes('email') || msg.includes('phone') || msg.includes('reach') || msg.includes('social')) {
-    reply = `You can reach me directly via:\n✉️ Email: ${profile?.email}\n📞 Phone: ${profile?.phone}\n🔗 GitHub: https://github.com/PMaheshwarreddy\n🔗 LinkedIn: https://www.linkedin.com/in/panduga-maheswar-reddy-20bb39286`;
-  } else {
-    reply = `I am Mahesh's AI assistant. You can ask me about his work experience, professional projects (like Next-Gen Governance, Multi-lingual Audio Translation, Flood Emergency Knowledge Graph), technical skills (LLMs, Python, React, GCP), or contact information!`;
+  if (!wantsStream) {
+    if (cached) return res.json({ reply: cached });
+    const result = await answer({ data, message, history });
+    if (cacheKey && result.source !== 'offline' && !result.partial) cacheSet(cacheKey, result.text);
+    return res.json({ reply: result.text.trim(), source: result.source });
   }
 
-  return res.json({ reply });
+  // Server-Sent Events: each event is {"t": "<text chunk>"}; the last one is {"done": true}
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders?.();
+  const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+
+  if (cached) {
+    send({ t: cached });
+    send({ done: true, source: 'cache' });
+    return res.end();
+  }
+
+  const ctrl = new AbortController();
+  res.on('close', () => { if (!res.writableEnded) ctrl.abort(); });
+
+  try {
+    const result = await answer({ data, message, history, signal: ctrl.signal, onToken: (t) => send({ t }) });
+    if (cacheKey && result.source !== 'offline' && !result.partial) cacheSet(cacheKey, result.text);
+    send({ done: true, source: result.source });
+  } catch (err) {
+    console.error('Chat error:', err);
+    send({ error: 'The assistant hit a problem. Please try again.' });
+  }
+  res.end();
+});
+
+// Always answer with JSON (bad JSON bodies, oversized payloads, unexpected errors)
+app.use((err, _req, res, _next) => {
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) console.error('Unhandled error:', err);
+  res.status(status).json({ message: status >= 500 ? 'Server error' : 'Invalid request', reply: 'Something went wrong with that request.' });
 });
 
 connectMongo()

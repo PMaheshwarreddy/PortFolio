@@ -4,17 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/sync-data.mjs",
     "dev": "vite --host 0.0.0.0",
+    "prebuild": "node scripts/sync-data.mjs",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "sync-data": "node scripts/sync-data.mjs"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "gsap": "^3.12.5",
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "three": "^0.185.0",
     "vite": "^6.0.7"
   }
 }
